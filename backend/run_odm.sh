@@ -109,9 +109,9 @@ cleanup() {
     echo
 
     if [[ -n "${TASK_UUID}" ]]; then
-        log_warn "Interrupted. Task still running."
-        log_info "Resume using:"
-        echo "  $(basename "$0") --resume ${TASK_UUID}"
+        log_warn "Interrupted. Canceling task on NodeODM..."
+        curl -fsS -X POST "${NODE_URL}/task/cancel" -d "uuid=${TASK_UUID}" > /dev/null 2>&1 || true
+        log_warn "Task canceled."
     fi
 
     exit 130

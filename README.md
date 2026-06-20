@@ -1,84 +1,75 @@
-# NodeODM based 3D Photogrametry
-- [Requirements](#requirements)
-- [Quickstart](#quickstart)
-- [Functionality](#functionality)
-- [Example Results](#example-results)
-- [Advance Usage](#advance-usage-cli)
-- [ODM Options](#odm-options)
+# Persepsi Robot: 3D Photogrammetry WebODM
 
-## Requirements
-To use this project, you only need to have **Docker** installed
+This system facilitates the automated capture of image datasets using a camera synchronized with robot hardware (via ESP32), and automatically processes those images into 3D models using NodeODM.
 
-## Quickstart
-1. Run nodeodm docker container
-   ```bash
-   docker run -it -d -p 3000:3000 --name nodeodm opendronemap/nodeodm --network host
-   ```
-2. Run application docker container \
-   <mark>**[IMPORTANT]**</mark> set NODE_HOST to ip address of the computer running NodeODM
-   ```bash
-   docker run -d \
-   -e NODE_HOST=192.168.200.38 \
-   -e NODE_PORT=6969 \
-   --name robot-perception \
-   --device /dev/v4l/by-id/usb-FEC_NYK_NEMESIS_202001010001-video-index0:/dev/video0 \
-   --network host \
-   -v "$(pwd)/datasets:/app/datasets" \
-   -v "$(pwd)/output:/app/output" \
-   --group-add video \
-   ghcr.io/anisamsrh/persepsi-robot:latest
-   ```
-3. Quick Troubleshooting : \
-   If you are using Linux/Ubuntu and running docker need sudo access, please refere to any tutorial to register your curret user as part of docker usergroup
+## System Architecture (Frontend & Backend Decoupling)
+This system is designed to be deployed across two separate devices:
+1. **Device 1 (Stationary / Main PC)**: Runs `NodeODM` and the `Backend` container. It is responsible for reading physical signals from the microcontroller (ESP32) and handling the heavy 3D rendering computations.
+2. **Device 2 (Mobile / Remote Laptop)**: Runs the `Frontend` UI. This device acts as the control panel and the **main camera** (the camera is accessed via the web browser on this device).
 
-## Functionality
-1. Convert dataset into 3D model object representation
-   > **FUNCTION** : START_ODM \
-   **INPUT** : Files of dataset or 1 .zip file \
-   **OUTPUT** : .obj file ready to be viewed on the web
-2. Run full pipeline
-   > **FUNCTION** : RUN_ALL \
-   **INPUT** : None \
-   **OUTPUT** : .obj file ready to be viewed
+### How Does the Synchronization Work?
+The photogrammetry automation in this system is designed to be independent of the number of robot waypoints. Instead, it reacts purely to hardware electrical signals.
 
-3. Take dataset using UR Robotic Arm
-   > **FUNCTION** : START_ROBOT \
-   **INPUT** : None \
-   **OUTPUT** : img files
+- **Standby**: When the "Start Robot" button is pressed on the Frontend, the device's camera turns on. The Frontend sends an instruction to the Backend to start listening to the ESP32 inputs (Pin 33 for Capture & Pin 32 for Stop). While on standby, the Frontend continuously polls the Backend for state updates every 150 milliseconds.
+- **Capture**: Every time the robot reaches a *waypoint*, the robotic arm sends a HIGH voltage signal to Pin 33 of the ESP32. The Backend reads this signal and changes its internal state to `capture` for frame N. The polling Frontend detects this instruction and automatically captures a frame from the live video feed into its RAM. A debounce mechanism ensures that the camera does not take duplicate photos at the same waypoint.
+- **Finish & Upload**: Once the survey process is complete, the robotic arm sends a signal to Pin 32. The Backend changes the state to `stop`. The Frontend responds by turning off the camera, bundling all the captured frames held in memory, and automatically uploading them to the Backend server as a `multipart/form-data` payload. Upon successful upload, the Backend immediately triggers the NodeODM processing pipeline.
 
-   <mark>Please SAVE THE IMGS TO ANOTHER DIRECTORY. As of now, we haven't implemented auto download to local</mark>
+---
 
-## Example Results
-The datasets were taken by UR Robotic Arm and saved beforehand.
+## Deployment: How to Download Images & Run the App
 
-![Dataset](assets/dataset.png)
+### 1. Run NodeODM (Device 1)
+Run NodeODM on your Main PC:
+```bash
+docker run -it -d -p 3000:3000 --name nodeodm opendronemap/nodeodm --network host
+```
 
-Using, START_ODM, we convert the dataset into .obj below:
+### 2. Run Backend (Device 1)
+The backend requires local folders to store the photo dataset (`datasets/`) and the 3D output (`output/`). Create them first.
+```bash
+# Create local directories
+mkdir -p datasets output
 
-![Result](assets/results.png)
+# Download/Pull the latest backend image
+docker pull kamna213/persepsi_backend:latest
 
-## Advance Usage (CLI)
-1. Make Robot UR take pictures
-   ```bash
-   python3 ur.py
-   ```
+# Remove old container if it exists
+docker rm -f pr-backend
 
-2. Do ODM on specific folder of dataset
-   ```bash
-   ./run_odm.sh datasets/
-   ```
+# Run the Backend container
+docker run -d \
+  --name pr-backend \
+  --network host \
+  -e PYTHONUNBUFFERED=1 \
+  -v $(pwd)/datasets:/app/datasets \
+  -v $(pwd)/output:/app/output \
+  --restart unless-stopped \
+  kamna213/persepsi_backend:latest
+```
 
-3. Build the docker image yourself
-   ```bash
-   docker-compose up -d --build
-   ```
-   or run it
-   ```bash
-   docker-compose up -d
-   ```
+### 3. Run Frontend (Device 2)
+Run this command on the device you will use to take pictures and access the Web UI.
+```bash
+# Download/Pull the latest frontend image
+docker pull kamna213/persepsi_frontend:latest
+
+# Remove old container if it exists
+docker rm -f pr-frontend
+
+# Run the Frontend container
+docker run -d \
+  --name pr-frontend \
+  -p 80:80 \
+  --restart unless-stopped \
+  kamna213/persepsi_frontend:latest
+```
+
+Once running, access the Frontend via your browser at `http://<IP_FRONTEND>:80`. Select your connected camera from the Dropdown UI, input the Backend URL, and start the survey process!
+
+---
 
 ## ODM Options
-To experiment with combinations of ODM options, you can edit file **run_odm.sh**
+To configure advanced NodeODM computation options, you can edit the `run_odm.sh` file in the backend folder (specifically the `ODM_OPTIONS` variable).
 | Option Name | Alternative / Supported Values | Description |
 | :--- | :--- | :--- |
 | **`feature-quality`** | `"ultra"`, `"highest"`, `"high"`, `"medium"`, `"low"`, `"lowest"` | Image feature detection quality level. |

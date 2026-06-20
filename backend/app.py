@@ -8,13 +8,15 @@ import os
 import subprocess
 import threading
 import time
+import signal
+import json
 from pathlib import Path
 
 # ======================
 # PATH CONFIG
 # ======================
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BASE_DIR.parent
+PROJECT_ROOT = BASE_DIR
 
 OUTPUT_DIR = PROJECT_ROOT / "output"
 DATASETS_DIR = PROJECT_ROOT / "datasets"
@@ -109,7 +111,7 @@ def find_models():
 
 
 # ======================
-# FILE SERVER (IMPORTANT FIX)
+# FILE SERVER
 # ======================
 @app.route("/api/files/<path:filename>")
 def serve_files(filename):
@@ -142,6 +144,21 @@ def api_models():
 
 
 # ======================
+# ROBOT STATE API
+# ======================
+@app.route("/api/robot_state")
+def robot_state():
+    state_file = PROJECT_ROOT / "robot_state.json"
+    if state_file.exists():
+        try:
+            with open(state_file, "r") as f:
+                return jsonify(json.load(f))
+        except:
+            pass
+    return jsonify({"action": "idle", "frame_id": 0})
+
+
+# ======================
 # STATUS
 # ======================
 @app.route("/api/status")
@@ -170,7 +187,8 @@ def launch_process(section, label, cmd, cwd, log_path: Path):
         stdout=log_file,
         stderr=log_file,
         text=True,
-        env=env
+        env=env,
+        start_new_session=True # Start a new process group for clean killing
     )
 
     set_state(section,
@@ -260,7 +278,6 @@ def start_robot():
 
 @app.route("/api/start_odm", methods=["POST"])
 def start_odm():
-    # 1. Validasi keberadaan file di request
     if 'files' not in request.files:
         return jsonify({"status": "failed", "error": "Tidak ada file yang diunggah"}), 400
     
@@ -269,10 +286,8 @@ def start_odm():
     if not uploaded_files or uploaded_files[0].filename == '':
         return jsonify({"status": "failed", "error": "File kosong atau tidak terpilih"}), 400
 
-    # 2. Reset folder dataset (Hapus sesi lama)
     clear_datasets_dir()
 
-    # 3. Simpan dan tangani ekstraksi
     for file in uploaded_files:
         filename = file.filename
         if not filename:
@@ -335,9 +350,10 @@ def stop_all():
     for pid in pids:
         if pid:
             try:
-                subprocess.run(["kill", str(pid)])
-            except:
-                pass
+                # Kill the entire process group
+                os.killpg(os.getpgid(pid), signal.SIGTERM)
+            except Exception as e:
+                print(f"Failed to kill process group for pid {pid}: {e}")
 
     set_state("robot", status="idle", pid=None)
     set_state("odm", status="idle", pid=None)
@@ -351,8 +367,4 @@ def stop_all():
 # ======================
 @app.route("/")
 def index():
-    return render_template("index.html")
-
-
-# if __name__ == "__main__":
-#     app.run(host="0.0.0.0", port=5000, debug=False)
+    return jsonify({"status": "ok", "message": "Presepsi Photogrammetry Backend API is running"})

@@ -1,0 +1,17 @@
+services:
+  persepsi_ui:
+    image: kamam213/persepsi-robot:latest 
+    container_name: persepsi_ui
+    network_mode: "host"
+    environment:
+      # PENTING: Ganti dengan IP dari komputer yang menjalankan nodeodm (Stationary Backend)
+      - NODE_HOST=192.168.200.38 
+      - NODE_PORT=3000
+      - PYTHONUNBUFFERED=1
+    devices:
+      # Mengakses kamera laptop/perangkat frontend
+      - /dev/video0:/dev/video0 
+    volumes:
+      - ./datasets:/app/datasets
+      - ./output:/app/output
+    restart: unless-stopped

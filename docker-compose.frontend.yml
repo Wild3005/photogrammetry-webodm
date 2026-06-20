@@ -1,0 +1,7 @@
+services:
+  frontend:
+    image: kamna213/persepsi_rontend:latest
+    container_name: pr-frontend
+    ports:
+      - "80:80"
+    restart: unless-stopped

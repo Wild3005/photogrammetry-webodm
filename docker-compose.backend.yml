@@ -1,0 +1,14 @@
+services:
+  backend:
+    image: kamna213/persepsi_backend:latest
+    container_name: pr-backend
+    network_mode: "host"
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./datasets:/app/datasets
+      - ./output:/app/output
+    restart: unless-stopped
+  

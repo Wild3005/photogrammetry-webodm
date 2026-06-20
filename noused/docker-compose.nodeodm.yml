@@ -1,0 +1,8 @@
+services:
+  nodeodm:
+    image: opendronemap/nodeodm
+    container_name: nodeodm
+    network_mode: "host"
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
