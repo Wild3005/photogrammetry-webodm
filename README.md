@@ -46,6 +46,10 @@ docker run -d \
   --restart unless-stopped \
   kamna213/persepsi_backend:latest
 ```
+> **Note on File Storage:** The `-v $(pwd)/datasets:/app/datasets` flag tells Docker to save the raw photos in the `datasets` folder of your *current directory*. You can change `$(pwd)/datasets` to any absolute path on your PC (e.g., `-v /home/user/Documents/datasets:/app/datasets`) if you prefer to save the photos and 3D outputs in a specific folder.
+
+-v ~/Documents/project/photogrammetry/datasets:/app/datasets \
+-v ~/Documents/project/photogrammetry/output:/app/output \
 
 ### 3. Run Frontend (Device 2)
 Run this command on the device you will use to take pictures and access the Web UI.
